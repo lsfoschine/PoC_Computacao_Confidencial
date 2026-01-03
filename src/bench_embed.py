@@ -136,6 +136,12 @@ def main() -> None:
     texts = [rec["text"] for rec in records]
     n_docs = len(texts)
     warmup_docs = min(args.warmup_docs, n_docs)
+    if n_docs > 0 and warmup_docs >= n_docs:
+        warmup_docs = max(0, n_docs - 1)
+        print(
+            f"Warm-up ajustado para {warmup_docs} docs para evitar zero docs medidos.",
+            flush=True,
+        )
     measured_texts = texts[warmup_docs:]
 
     run_id = build_run_id()
