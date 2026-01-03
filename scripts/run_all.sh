@@ -91,6 +91,7 @@ if [[ "$SKIP_DATASET" == "0" ]]; then
 fi
 
 if [[ "$SKIP_ENV" == "0" ]]; then
+  mkdir -p reports
   ./scripts/collect_env.sh > reports/env.txt
 fi
 
