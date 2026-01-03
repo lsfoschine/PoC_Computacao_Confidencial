@@ -21,3 +21,8 @@ Configure o token do Hugging Face:
 cp .env.example .env
 ```
 Edite `.env` com seu `HUGGINGFACE_HUB_TOKEN`.
+
+## Gerar corpus
+```bash
+uv run python src/dataset_gen.py
+```
