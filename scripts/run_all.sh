@@ -11,10 +11,13 @@ Uso: ./scripts/run_all.sh [opcoes]
 Opcoes:
   --help                Mostra esta ajuda e sai
   --sizes LISTA         Tamanhos alvo em chars (ex: "256,512,1024")
-  --docs-per-size N     Quantidade de docs por tamanho (default: 24)
-  --seq-lens LISTA      Seq lens separados por espaco (ex: "256 512 1024")
-  --batch-sizes LISTA   Batch sizes separados por espaco (ex: "4 8 16")
-  --limit N             Limita numero de docs no benchmark
+  --n-per-size N        Quantidade de docs por tamanho (default: 24)
+  --language LANG       Idioma do corpus (default: pt-br)
+  --min-words N         Minimo de palavras por documento
+  --max-lengths LISTA   Max lengths separados por espaco (ex: "256 512 1024")
+  --batches LISTA       Batch sizes separados por espaco (ex: "4 8 16")
+  --threads N           Numero de threads CPU
+  --warmup-docs N       Quantidade de docs para warm-up
   --skip-dataset         Nao gera o corpus
   --skip-env             Nao coleta ambiente
   --skip-matrix          Nao roda matriz de benchmark
@@ -25,10 +28,13 @@ USAGE
 }
 
 SIZES=""
-DOCS_PER_SIZE="24"
-SEQ_LENS=""
-BATCH_SIZES=""
-LIMIT=""
+N_PER_SIZE="24"
+LANGUAGE="pt-br"
+MIN_WORDS=""
+MAX_LENGTHS=""
+BATCHES=""
+THREADS=""
+WARMUP_DOCS=""
 SKIP_DATASET="0"
 SKIP_ENV="0"
 SKIP_MATRIX="0"
@@ -43,20 +49,32 @@ while [[ $# -gt 0 ]]; do
       SIZES="$2"
       shift 2
       ;;
-    --docs-per-size)
-      DOCS_PER_SIZE="$2"
+    --n-per-size)
+      N_PER_SIZE="$2"
       shift 2
       ;;
-    --seq-lens)
-      SEQ_LENS="$2"
+    --language)
+      LANGUAGE="$2"
       shift 2
       ;;
-    --batch-sizes)
-      BATCH_SIZES="$2"
+    --min-words)
+      MIN_WORDS="$2"
       shift 2
       ;;
-    --limit)
-      LIMIT="$2"
+    --max-lengths)
+      MAX_LENGTHS="$2"
+      shift 2
+      ;;
+    --batches)
+      BATCHES="$2"
+      shift 2
+      ;;
+    --threads)
+      THREADS="$2"
+      shift 2
+      ;;
+    --warmup-docs)
+      WARMUP_DOCS="$2"
       shift 2
       ;;
     --skip-dataset)
@@ -84,10 +102,17 @@ if [[ "$SKIP_DATASET" == "0" ]]; then
   if [[ -n "$SIZES" ]]; then
     DATASET_ARGS+=(--sizes "$SIZES")
   fi
-  if [[ -n "$DOCS_PER_SIZE" ]]; then
-    DATASET_ARGS+=(--docs-per-size "$DOCS_PER_SIZE")
+  if [[ -n "$N_PER_SIZE" ]]; then
+    DATASET_ARGS+=(--n-per-size "$N_PER_SIZE")
+  fi
+  if [[ -n "$LANGUAGE" ]]; then
+    DATASET_ARGS+=(--language "$LANGUAGE")
+  fi
+  if [[ -n "$MIN_WORDS" ]]; then
+    DATASET_ARGS+=(--min-words "$MIN_WORDS")
   fi
   uv run python src/dataset_gen.py "${DATASET_ARGS[@]}"
+  ./scripts/hash_corpus.sh
 fi
 
 if [[ "$SKIP_ENV" == "0" ]]; then
@@ -96,6 +121,6 @@ if [[ "$SKIP_ENV" == "0" ]]; then
 fi
 
 if [[ "$SKIP_MATRIX" == "0" ]]; then
-  export SEQ_LENS BATCH_SIZES LIMIT
+  export MAX_LENGTHS BATCHES THREADS WARMUP_DOCS
   ./scripts/run_matrix.sh
 fi

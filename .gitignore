@@ -15,3 +15,6 @@ wheels/
 .uv-python/
 results/
 reports/
+data/*
+!data/corpus.jsonl
+!data/corpus.sha256

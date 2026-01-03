@@ -1,6 +1,6 @@
 # PoC Computacao Confidencial - Benchmark de Embeddings
 
-Benchmark CPU-only do modelo BAAI/bge-m3 usando corpus sintetico em PT-BR.
+Benchmark CPU-only do modelo BAAI/bge-m3 usando corpus sintetico em PT-BR com rastreabilidade por hashes.
 
 ## Requisitos
 - Python >= 3.10 e < 3.13 (recomendado 3.12)
@@ -22,33 +22,45 @@ cp .env.example .env
 ```
 Edite `.env` com seu `HUGGINGFACE_HUB_TOKEN`.
 
-## Gerar corpus
+## Fluxo recomendado
+
+### 1) Gerar corpus fixo (apenas uma vez)
 ```bash
-uv run python src/dataset_gen.py
+uv run python src/dataset_gen.py --out data/corpus.jsonl --seed 13 --sizes 256,512,1024,2048,4096,8192 --n-per-size 24 --language pt-br
+./scripts/hash_corpus.sh
 ```
 
-## Rodar um benchmark
+### 2) Validar corpus (em cada maquina)
 ```bash
-uv run python src/bench_embed.py --seq-len 512 --batch-size 16
+./scripts/verify_corpus.sh
 ```
 
-## Rodar matriz de benchmarks
+### 3) Rodar benchmark (em cada maquina)
+```bash
+uv run python src/bench_embed.py \
+  --corpus data/corpus.jsonl \
+  --batch 16 \
+  --max-length 512 \
+  --threads 8 \
+  --warmup-docs 32
+```
+
+Os resultados sao gravados em `results/<run_id>/` com `embeddings.npy`, `embeddings.sha256`, `run.jsonl` e `env.json`.
+
+### 4) Rodar matriz
 ```bash
 ./scripts/run_matrix.sh
 ```
 
-## Rodar tudo (setup rapido)
-```bash
-./scripts/run_all.sh
-```
+A matriz cria `results/<matrix_run_id>/` e grava `summary.csv` com o consolidado.
 
-## Coletar ambiente
+## Runner completo (dataset + hash + env + matriz)
 ```bash
-./scripts/collect_env.sh > reports/env.txt
+./scripts/run_all.sh --help
 ```
 
 ## Saidas
-- `data/corpus.jsonl`: corpus deterministico.
-- `results/run.jsonl`: metricas por execucao (JSONL).
-- `results/summary.csv`: consolidado de execucoes.
-- `results/embeddings.npy`: embeddings da ultima execucao.
+- `data/corpus.jsonl`: corpus deterministico (versionado).
+- `data/corpus.sha256`: hash do corpus (versionado).
+- `results/<run_id>/`: saidas do benchmark.
+- `results/<matrix_run_id>/summary.csv`: consolidado da matriz.
