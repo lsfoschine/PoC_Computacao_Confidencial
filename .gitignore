@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+.hf-cache/
+.joblib/
+.uv-cache/
+.uv-python/
+results/
+reports/
