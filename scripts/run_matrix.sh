@@ -4,61 +4,96 @@ set -euo pipefail
 export UV_CACHE_DIR="${UV_CACHE_DIR:-.uv-cache}"
 export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-.uv-python}"
 
-DEFAULT_SEQ_LENS=(256 512 1024 2048)
-DEFAULT_BATCH_SIZES=(4 8 16)
+DEFAULT_MAX_LENGTHS=(256 512 1024 2048)
+DEFAULT_BATCHES=(4 8 16)
 
-if [[ -n "${SEQ_LENS:-}" ]]; then
-  read -r -a SEQ_LENS_ARR <<< "${SEQ_LENS}"
+if [[ -n "${MAX_LENGTHS:-}" ]]; then
+  read -r -a MAX_LENGTHS_ARR <<< "${MAX_LENGTHS}"
 else
-  SEQ_LENS_ARR=("${DEFAULT_SEQ_LENS[@]}")
+  MAX_LENGTHS_ARR=("${DEFAULT_MAX_LENGTHS[@]}")
 fi
 
-if [[ -n "${BATCH_SIZES:-}" ]]; then
-  read -r -a BATCH_SIZES_ARR <<< "${BATCH_SIZES}"
+if [[ -n "${BATCHES:-}" ]]; then
+  read -r -a BATCHES_ARR <<< "${BATCHES}"
 else
-  BATCH_SIZES_ARR=("${DEFAULT_BATCH_SIZES[@]}")
+  BATCHES_ARR=("${DEFAULT_BATCHES[@]}")
 fi
 
-LIMIT_ARG=()
-if [[ -n "${LIMIT:-}" ]]; then
-  LIMIT_ARG=(--limit "${LIMIT}")
+THREADS_ARG=()
+if [[ -n "${THREADS:-}" ]]; then
+  THREADS_ARG=(--threads "${THREADS}")
 fi
 
-for seq_len in "${SEQ_LENS_ARR[@]}"; do
-  for batch_size in "${BATCH_SIZES_ARR[@]}"; do
-    printf "\n== seq_len=%s batch=%s ==\n" "$seq_len" "$batch_size"
-    uv run python src/bench_embed.py --seq-len "$seq_len" --batch-size "$batch_size" "${LIMIT_ARG[@]}"
+WARMUP_ARG=()
+if [[ -n "${WARMUP_DOCS:-}" ]]; then
+  WARMUP_ARG=(--warmup-docs "${WARMUP_DOCS}")
+fi
+
+CORPUS_PATH="${CORPUS_PATH:-data/corpus.jsonl}"
+
+./scripts/verify_corpus.sh
+
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+host="$(hostname)"
+gitsha="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
+MATRIX_RUN_ID="${MATRIX_RUN_ID:-matrix-${timestamp}-${host}-${gitsha}}"
+export MATRIX_RUN_ID
+RUN_ROOT="results/${MATRIX_RUN_ID}"
+
+mkdir -p "${RUN_ROOT}"
+
+for max_length in "${MAX_LENGTHS_ARR[@]}"; do
+  for batch in "${BATCHES_ARR[@]}"; do
+    run_dir="${RUN_ROOT}/max${max_length}_b${batch}"
+    printf "\n== max_length=%s batch=%s ==\n" "$max_length" "$batch"
+    uv run python src/bench_embed.py \
+      --corpus "${CORPUS_PATH}" \
+      --outdir "${run_dir}" \
+      --max-length "${max_length}" \
+      --batch "${batch}" \
+      "${THREADS_ARG[@]}" \
+      "${WARMUP_ARG[@]}"
   done
 done
 
 uv run python - <<'PY'
 import csv
 import json
+import os
 from pathlib import Path
 
-run_path = Path("results/run.jsonl")
-summary_path = Path("results/summary.csv")
+matrix_id = os.environ.get("MATRIX_RUN_ID")
+if not matrix_id:
+    raise SystemExit("MATRIX_RUN_ID nao definido")
 
-if not run_path.exists():
-    raise SystemExit("results/run.jsonl nao encontrado")
+run_root = Path("results") / matrix_id
+summary_path = run_root / "summary.csv"
+
+if not run_root.exists():
+    raise SystemExit(f"{run_root} nao encontrado")
 
 rows = []
-with run_path.open("r", encoding="utf-8") as handle:
-    for line in handle:
-        if not line.strip():
-            continue
-        rows.append(json.loads(line))
+for run_file in run_root.rglob("run.jsonl"):
+    with run_file.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            rows.append(json.loads(line))
 
 fieldnames = [
+    "run_id",
     "timestamp",
-    "model",
-    "seq_len",
-    "batch_size",
-    "num_docs",
+    "model_id",
+    "max_length",
+    "batch",
+    "threads",
+    "n_docs",
     "p50_ms",
     "p95_ms",
-    "docs_per_s",
-    "total_s",
+    "docs_per_sec",
+    "total_seconds",
+    "corpus_sha256",
+    "embeddings_sha256",
 ]
 
 with summary_path.open("w", encoding="utf-8", newline="") as handle:

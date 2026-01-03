@@ -115,7 +115,7 @@ WORDS = [
 SIZES_DEFAULT = [256, 512, 1024, 2048, 4096, 8192]
 
 
-def build_text(target_chars: int, rng: random.Random) -> str:
+def build_text(target_chars: int, rng: random.Random, min_words: int | None) -> str:
     sentences = []
     while True:
         length = rng.randint(6, 14)
@@ -123,8 +123,11 @@ def build_text(target_chars: int, rng: random.Random) -> str:
         sentence = " ".join(sentence_words).capitalize() + "."
         sentences.append(sentence)
         text = " ".join(sentences)
-        if len(text) >= target_chars:
-            return text
+        if len(text) < target_chars:
+            continue
+        if min_words is not None and len(text.split()) < min_words:
+            continue
+        return text
 
 
 def parse_sizes(raw: str) -> list[int]:
@@ -141,12 +144,22 @@ def main() -> None:
         help="Lista de tamanhos alvo (chars)",
     )
     parser.add_argument(
-        "--docs-per-size",
+        "--n-per-size",
         type=int,
         default=24,
         help="Quantidade de documentos por tamanho",
     )
+    parser.add_argument("--language", default="pt-br", help="Idioma (apenas pt-br)")
+    parser.add_argument(
+        "--min-words",
+        type=int,
+        default=None,
+        help="Minimo de palavras por documento",
+    )
     args = parser.parse_args()
+
+    if args.language.lower() != "pt-br":
+        raise SystemExit("Apenas language=pt-br esta disponivel.")
 
     rng = random.Random(args.seed)
     sizes = parse_sizes(args.sizes)
@@ -156,12 +169,11 @@ def main() -> None:
     records = []
     doc_id = 0
     for target in sizes:
-        for _ in range(args.docs_per_size):
-            text = build_text(target, rng)
+        for _ in range(args.n_per_size):
+            text = build_text(target, rng, args.min_words)
             record = {
                 "id": doc_id,
                 "size_target": target,
-                "n_chars": len(text),
                 "text": text,
             }
             records.append(record)
