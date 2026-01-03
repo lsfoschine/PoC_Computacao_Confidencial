@@ -26,3 +26,8 @@ Edite `.env` com seu `HUGGINGFACE_HUB_TOKEN`.
 ```bash
 uv run python src/dataset_gen.py
 ```
+
+## Rodar um benchmark
+```bash
+uv run python src/bench_embed.py --seq-len 512 --batch-size 16
+```
