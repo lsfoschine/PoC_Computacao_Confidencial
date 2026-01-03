@@ -1,6 +1,6 @@
 # PoC Computacao Confidencial - Benchmark de Embeddings
 
-Base de projeto para benchmark CPU-only do modelo BAAI/bge-m3.
+Benchmark CPU-only do modelo BAAI/bge-m3 usando corpus sintetico em PT-BR.
 
 ## Requisitos
 - Python >= 3.10 e < 3.13 (recomendado 3.12)
@@ -31,3 +31,24 @@ uv run python src/dataset_gen.py
 ```bash
 uv run python src/bench_embed.py --seq-len 512 --batch-size 16
 ```
+
+## Rodar matriz de benchmarks
+```bash
+./scripts/run_matrix.sh
+```
+
+## Rodar tudo (setup rapido)
+```bash
+./scripts/run_all.sh
+```
+
+## Coletar ambiente
+```bash
+./scripts/collect_env.sh > reports/env.txt
+```
+
+## Saidas
+- `data/corpus.jsonl`: corpus deterministico.
+- `results/run.jsonl`: metricas por execucao (JSONL).
+- `results/summary.csv`: consolidado de execucoes.
+- `results/embeddings.npy`: embeddings da ultima execucao.
