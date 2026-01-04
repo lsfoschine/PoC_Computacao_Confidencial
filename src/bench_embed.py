@@ -245,7 +245,27 @@ def main() -> None:
         handle.write(json.dumps(run_record, ensure_ascii=True) + "\n")
 
     env_path = out_dir / "env.json"
-    env_path.write_text(json.dumps(build_env(), ensure_ascii=True, indent=2) + "\n")
+    script_path = Path(__file__).resolve().parent.parent / "scripts" / "collect_env.sh"
+    if script_path.exists():
+        try:
+            subprocess.run(
+                [str(script_path), "--out", str(env_path)],
+                check=True,
+            )
+        except Exception as exc:
+            env_path.write_text(
+                json.dumps(
+                    {
+                        "error": f"collect_env_failed: {exc}",
+                        "fallback": build_env(),
+                    },
+                    ensure_ascii=True,
+                    indent=2,
+                )
+                + "\n"
+            )
+    else:
+        env_path.write_text(json.dumps(build_env(), ensure_ascii=True, indent=2) + "\n")
 
     print(json.dumps(run_record, ensure_ascii=True))
 
