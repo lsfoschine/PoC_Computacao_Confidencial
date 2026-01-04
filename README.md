@@ -3,16 +3,18 @@
 Benchmark CPU-only do modelo BAAI/bge-m3 usando corpus sintetico em PT-BR com rastreabilidade por hashes.
 
 ## Requisitos
-- Python >= 3.10 e < 3.13 (recomendado 3.12)
 - uv
 
 ## Setup
+O uv gerencia a versao do Python via `.python-version` e prepara o venv automaticamente.
 ```bash
+uv python install
 uv sync
 ```
 
 Se o ambiente bloquear caches fora do projeto:
 ```bash
+UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv python install
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync
 ```
 
@@ -57,6 +59,11 @@ A matriz cria `results/<matrix_run_id>/` e grava `summary.csv` com o consolidado
 ## Runner completo (dataset + hash + env + matriz)
 ```bash
 ./scripts/run_all.sh --help
+```
+
+Por padrao o run_all executa `uv sync` para preparar o venv. Para pular:
+```bash
+./scripts/run_all.sh --skip-sync
 ```
 
 ## Saidas
