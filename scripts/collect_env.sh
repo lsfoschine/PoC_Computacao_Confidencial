@@ -22,7 +22,7 @@ else
 fi
 
 printf "\n== Python ==\n"
-python --version
+uv run python --version
 
 printf "\n== UV ==\n"
 uv --version
