@@ -59,6 +59,11 @@ A matriz cria `results/<matrix_run_id>/` e grava `summary.csv` com o consolidado
 ./scripts/run_all.sh --help
 ```
 
+Por padrao o run_all executa `uv sync` para preparar o venv. Para pular:
+```bash
+./scripts/run_all.sh --skip-sync
+```
+
 ## Saidas
 - `data/corpus.jsonl`: corpus deterministico (versionado).
 - `data/corpus.sha256`: hash do corpus (versionado).

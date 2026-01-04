@@ -18,6 +18,7 @@ Opcoes:
   --batches LISTA       Batch sizes separados por espaco (ex: "4 8 16")
   --threads N           Numero de threads CPU
   --warmup-docs N       Quantidade de docs para warm-up
+  --skip-sync            Nao executa uv sync
   --skip-dataset         Nao gera o corpus
   --skip-env             Nao coleta ambiente
   --skip-matrix          Nao roda matriz de benchmark
@@ -38,6 +39,7 @@ WARMUP_DOCS=""
 SKIP_DATASET="0"
 SKIP_ENV="0"
 SKIP_MATRIX="0"
+SKIP_SYNC="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -77,6 +79,10 @@ while [[ $# -gt 0 ]]; do
       WARMUP_DOCS="$2"
       shift 2
       ;;
+    --skip-sync)
+      SKIP_SYNC="1"
+      shift
+      ;;
     --skip-dataset)
       SKIP_DATASET="1"
       shift
@@ -96,6 +102,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$SKIP_SYNC" == "0" ]]; then
+  uv sync
+fi
 
 if [[ "$SKIP_DATASET" == "0" ]]; then
   DATASET_ARGS=()
