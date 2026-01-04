@@ -68,6 +68,13 @@ capture_cmd numactl_hardware "numactl" "--hardware"
 
 capture_cmd taskset_self "taskset" "-pc" "$$"
 
+capture_cmd free_h "free" "-h"
+capture_cmd meminfo "cat" "/proc/meminfo"
+
+capture_cmd lsblk "lsblk" "-o" "NAME,TYPE,SIZE,ROTA,TRAN,MODEL"
+capture_cmd df_h "df" "-h"
+capture_cmd blockdev_rota "cat" "/sys/block/*/queue/rotational"
+
 capture_cmd confidential_dmesg "dmesg"
 if [[ -f "${TMPDIR_ENV}/confidential_dmesg" ]]; then
   grep -E -i "sev|snp|tdx|confidential|cc" "${TMPDIR_ENV}/confidential_dmesg" >"${TMPDIR_ENV}/confidential_dmesg_filtered" || echo "not_found" >"${TMPDIR_ENV}/confidential_dmesg_filtered"
@@ -140,6 +147,15 @@ payload = {
     },
     "numa": {
         "numactl_hardware": read_file("numactl_hardware"),
+    },
+    "memory": {
+        "free_h": read_file("free_h"),
+        "meminfo": read_file("meminfo"),
+    },
+    "storage": {
+        "lsblk": read_file("lsblk"),
+        "df_h": read_file("df_h"),
+        "blockdev_rotational": read_file("blockdev_rota"),
     },
     "pinning": {
         "taskset": read_file("taskset_self"),
