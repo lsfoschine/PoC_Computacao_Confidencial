@@ -19,6 +19,7 @@ Opcoes:
   --threads N           Numero de threads CPU
   --warmup-docs N       Quantidade de docs para warm-up
   --skip-sync            Nao executa uv sync
+  --skip-python          Nao executa uv python install
   --skip-dataset         Nao gera o corpus
   --skip-env             Nao coleta ambiente
   --skip-matrix          Nao roda matriz de benchmark
@@ -40,6 +41,7 @@ SKIP_DATASET="0"
 SKIP_ENV="0"
 SKIP_MATRIX="0"
 SKIP_SYNC="0"
+SKIP_PYTHON="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +85,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_SYNC="1"
       shift
       ;;
+    --skip-python)
+      SKIP_PYTHON="1"
+      shift
+      ;;
     --skip-dataset)
       SKIP_DATASET="1"
       shift
@@ -102,6 +108,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$SKIP_PYTHON" == "0" ]]; then
+  uv python install
+fi
 
 if [[ "$SKIP_SYNC" == "0" ]]; then
   uv sync
