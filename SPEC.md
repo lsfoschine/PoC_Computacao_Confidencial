@@ -33,6 +33,7 @@ embeddings or measured metrics.
 - `total_seconds_measured`
 - `docs_per_sec`
 - amortized per-document `p50_ms` and `p95_ms`
+- dimensionless `tail_amplification`, calculated as `p95_ms / p50_ms`
 - measured-window `cpu_user_s` and `cpu_system_s`
 - process-wide `rss_peak_mb`
 
@@ -45,6 +46,10 @@ Every run records:
 - Python version, Git commit, and dirty state;
 - environment metadata covering CPU, memory, storage, kernel, NUMA, affinity,
   frequency policy, microcode, and confidential-computing signals.
+
+The benchmark remains provider-agnostic. The executor may assign a descriptive
+`MATRIX_RUN_ID` to organize scenarios, while `env.json` remains the auditable
+source of observed platform characteristics.
 
 ## Statistical reporting
 
