@@ -1,73 +1,158 @@
-# PoC Computacao Confidencial - Benchmark de Embeddings
+# Confidential Computing Benchmark PoC
 
-Benchmark CPU-only do modelo BAAI/bge-m3 usando corpus sintetico em PT-BR com rastreabilidade por hashes.
+[English](README.md) | [Português](README.pt-BR.md)
 
-## Requisitos
-- uv
+A reproducible CPU-only benchmark for comparing embedding workloads across local,
+GCP baseline, and GCP confidential-computing machines. The benchmark uses
+`BAAI/bge-m3`, versioned input datasets, content hashes, isolated warm-up data,
+per-run environment metadata, and repeated measurements with 95% confidence
+intervals.
 
-## Setup
-O uv gerencia a versao do Python via `.python-version` e prepara o venv automaticamente.
+![Example benchmark result layout](docs/results-preview.svg)
+
+## Requirements
+
+- [uv](https://docs.astral.sh/uv/)
+
+The Python version is pinned in `.python-version`; uv downloads it and creates the
+virtual environment.
+
+## Environment setup
+
 ```bash
 uv python install
 uv sync
 ```
 
-Se o ambiente bloquear caches fora do projeto:
+For environments where user-level cache directories are restricted:
+
 ```bash
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv python install
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync
 ```
 
-Configure o token do Hugging Face:
+For authenticated Hugging Face downloads:
+
 ```bash
 cp .env.example .env
 ```
-Edite `.env` com seu `HUGGINGFACE_HUB_TOKEN`.
 
-## Fluxo recomendado
+Set `HUGGINGFACE_HUB_TOKEN` in `.env`. The file is ignored by Git.
 
-### 1) Gerar corpus fixo (apenas uma vez)
-```bash
-uv run python src/dataset_gen.py --out data/corpus.jsonl --seed 13 --sizes 256,512,1024,2048,4096,8192 --n-per-size 24 --language pt-br
-./scripts/hash_corpus.sh
-```
+## Versioned datasets
 
-### 2) Validar corpus (em cada maquina)
+The repository contains two deterministic datasets:
+
+- `data/corpus.jsonl`: 144 measured documents, with 24 documents for each target
+  size: 256, 512, 1024, 2048, 4096, and 8192 approximate characters.
+- `data/warmup.jsonl`: 32 deterministic, size-stratified documents used only to
+  stabilize the same tokenization and encoding pipeline before measurement.
+
+Validate both datasets before running:
+
 ```bash
 ./scripts/verify_corpus.sh
 ```
 
-### 3) Rodar benchmark (em cada maquina)
+`run_all.sh` preserves and validates existing versioned datasets. It does not
+regenerate them by default. To intentionally replace both datasets and hashes:
+
+```bash
+./scripts/run_all.sh --regenerate-corpus
+```
+
+## Single benchmark run
+
 ```bash
 uv run python src/bench_embed.py \
   --corpus data/corpus.jsonl \
+  --warmup-corpus data/warmup.jsonl \
   --batch 16 \
   --max-length 512 \
   --threads 8 \
   --warmup-docs 32
 ```
 
-Os resultados sao gravados em `results/<run_id>/` com `embeddings.npy`, `embeddings.sha256`, `run.jsonl` e `env.json`.
+Measured throughput is calculated as:
 
-### 4) Rodar matriz
+```text
+docs_per_sec = n_docs_measured / total_seconds_measured
+```
+
+Warm-up documents are never included in measured latency, throughput, CPU time,
+or embeddings. The recorded p50/p95 values are amortized per-document latency
+derived from each batch duration.
+
+## Repeated benchmark matrix
+
 ```bash
 ./scripts/run_matrix.sh
 ```
 
-A matriz cria `results/<matrix_run_id>/` e grava `summary.csv` com o consolidado.
+The default matrix runs three repetitions for every `max_length × batch`
+combination. Override it with:
 
-## Runner completo (dataset + hash + env + matriz)
+```bash
+REPETITIONS=5 MAX_LENGTHS="256 512 1024" BATCHES="4 8" ./scripts/run_matrix.sh
+```
+
+Outputs:
+
+- `runs.csv`: one row per individual execution.
+- `summary.csv`: means, standard deviation, and 95% confidence intervals grouped
+  by model, maximum length, batch, threads, and dataset hashes.
+
+Use the confidence intervals when comparing machines. Small differences with
+overlapping intervals should not be reported as conclusive gains.
+
+## Complete runner
+
 ```bash
 ./scripts/run_all.sh --help
+./scripts/run_all.sh
 ```
 
-Por padrao o run_all executa `uv sync` para preparar o venv. Para pular:
-```bash
-./scripts/run_all.sh --skip-sync
+The complete runner installs the pinned Python version, synchronizes the uv
+environment, validates the datasets, captures standalone environment metadata,
+and executes the repeated matrix.
+
+Useful options:
+
+```text
+--repetitions N
+--regenerate-corpus
+--skip-python
+--skip-sync
+--skip-dataset
+--skip-env
+--skip-matrix
 ```
 
-## Saidas
-- `data/corpus.jsonl`: corpus deterministico (versionado).
-- `data/corpus.sha256`: hash do corpus (versionado).
-- `results/<run_id>/`: saidas do benchmark.
-- `results/<matrix_run_id>/summary.csv`: consolidado da matriz.
+## Run artifacts
+
+Each benchmark run writes:
+
+- `results/<run_id>/embeddings.npy`
+- `results/<run_id>/embeddings.sha256`
+- `results/<run_id>/run.jsonl`
+- `results/<run_id>/env.json`
+
+Matrix executions write nested runs under `results/<matrix_run_id>/`, plus
+`runs.csv` and `summary.csv`.
+
+The environment metadata is captured best-effort and includes CPU topology,
+microcode, frequency policy, NUMA, affinity, memory, storage and mount details,
+kernel and boot parameters, and confidential-computing evidence. Missing or
+permission-restricted signals are represented explicitly in the JSON.
+
+## Reproducing a comparison
+
+For every machine:
+
+1. Check out the same Git commit.
+2. Run `./scripts/verify_corpus.sh`.
+3. Confirm identical corpus and warm-up hashes.
+4. Use the same matrix, thread count, and repetition count.
+5. Compare `summary.csv` and retain every run directory as an audit artifact.
+
+Do not commit `.env`, `results/`, or `reports/`.

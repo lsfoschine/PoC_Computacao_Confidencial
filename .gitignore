@@ -18,3 +18,5 @@ reports/
 data/*
 !data/corpus.jsonl
 !data/corpus.sha256
+!data/warmup.jsonl
+!data/warmup.sha256

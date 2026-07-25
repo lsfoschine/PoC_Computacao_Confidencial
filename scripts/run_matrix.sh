@@ -30,6 +30,12 @@ if [[ -n "${WARMUP_DOCS:-}" ]]; then
 fi
 
 CORPUS_PATH="${CORPUS_PATH:-data/corpus.jsonl}"
+REPETITIONS="${REPETITIONS:-3}"
+
+if ! [[ "$REPETITIONS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "REPETITIONS deve ser um inteiro positivo" >&2
+  exit 1
+fi
 
 ./scripts/verify_corpus.sh
 
@@ -44,64 +50,20 @@ mkdir -p "${RUN_ROOT}"
 
 for max_length in "${MAX_LENGTHS_ARR[@]}"; do
   for batch in "${BATCHES_ARR[@]}"; do
-    run_dir="${RUN_ROOT}/max${max_length}_b${batch}"
-    printf "\n== max_length=%s batch=%s ==\n" "$max_length" "$batch"
-    uv run python src/bench_embed.py \
-      --corpus "${CORPUS_PATH}" \
-      --outdir "${run_dir}" \
-      --max-length "${max_length}" \
-      --batch "${batch}" \
-      "${THREADS_ARG[@]}" \
-      "${WARMUP_ARG[@]}"
+    for repetition in $(seq 1 "$REPETITIONS"); do
+      export MATRIX_REPETITION="$repetition"
+      run_dir="${RUN_ROOT}/max${max_length}_b${batch}_rep${repetition}"
+      printf "\n== max_length=%s batch=%s repetition=%s/%s ==\n" \
+        "$max_length" "$batch" "$repetition" "$REPETITIONS"
+      uv run python src/bench_embed.py \
+        --corpus "${CORPUS_PATH}" \
+        --outdir "${run_dir}" \
+        --max-length "${max_length}" \
+        --batch "${batch}" \
+        "${THREADS_ARG[@]}" \
+        "${WARMUP_ARG[@]}"
+    done
   done
 done
 
-uv run python - <<'PY'
-import csv
-import json
-import os
-from pathlib import Path
-
-matrix_id = os.environ.get("MATRIX_RUN_ID")
-if not matrix_id:
-    raise SystemExit("MATRIX_RUN_ID nao definido")
-
-run_root = Path("results") / matrix_id
-summary_path = run_root / "summary.csv"
-
-if not run_root.exists():
-    raise SystemExit(f"{run_root} nao encontrado")
-
-rows = []
-for run_file in run_root.rglob("run.jsonl"):
-    with run_file.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            rows.append(json.loads(line))
-
-fieldnames = [
-    "run_id",
-    "timestamp",
-    "model_id",
-    "max_length",
-    "batch",
-    "threads",
-    "n_docs_total",
-    "n_docs_measured",
-    "p50_ms",
-    "p95_ms",
-    "docs_per_sec",
-    "total_seconds_measured",
-    "corpus_sha256",
-    "embeddings_sha256",
-]
-
-with summary_path.open("w", encoding="utf-8", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in rows:
-        writer.writerow({key: row.get(key, "") for key in fieldnames})
-
-print(f"Wrote {summary_path}")
-PY
+uv run python src/summarize_results.py --run-root "${RUN_ROOT}"
