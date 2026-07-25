@@ -45,14 +45,23 @@ RUN_FIELDS = [
     "matrix_repetition",
     "timestamp",
     "model_id",
+    "model_revision",
+    "python_version",
+    "git_commit",
+    "git_dirty",
+    "uv_lock_sha256",
     "max_length",
     "batch",
     "threads",
+    "interop_threads",
+    "warmup_docs",
     "n_docs_total",
     "n_docs_measured",
     "p50_ms",
     "p95_ms",
     "tail_amplification",
+    "latency_semantics",
+    "tail_amplification_semantics",
     "docs_per_sec",
     "total_seconds_measured",
     "corpus_sha256",
@@ -60,11 +69,38 @@ RUN_FIELDS = [
     "embeddings_sha256",
 ]
 
-SUMMARY_FIELDS = [
+GROUP_FIELDS = [
     "model_id",
+    "model_revision",
+    "python_version",
+    "git_commit",
+    "git_dirty",
+    "uv_lock_sha256",
     "max_length",
     "batch",
     "threads",
+    "interop_threads",
+    "warmup_docs",
+    "corpus_sha256",
+    "warmup_corpus_sha256",
+    "latency_semantics",
+    "tail_amplification_semantics",
+]
+
+SUMMARY_FIELDS = [
+    "model_id",
+    "model_revision",
+    "python_version",
+    "git_commit",
+    "git_dirty",
+    "uv_lock_sha256",
+    "max_length",
+    "batch",
+    "threads",
+    "interop_threads",
+    "warmup_docs",
+    "latency_semantics",
+    "tail_amplification_semantics",
     "n_runs",
     "n_docs_total",
     "n_docs_measured",
@@ -123,23 +159,48 @@ def write_runs(path: Path, rows: list[dict]) -> None:
             writer.writerow({key: row.get(key, "") for key in RUN_FIELDS})
 
 
-def write_summary(path: Path, rows: list[dict]) -> None:
+def group_rows(rows: list[dict]) -> dict[tuple, list[dict]]:
     groups = defaultdict(list)
     for row in rows:
-        key = (
-            row.get("model_id"),
-            row.get("max_length"),
-            row.get("batch"),
-            row.get("threads"),
-            row.get("corpus_sha256"),
-            row.get("warmup_corpus_sha256"),
-        )
+        key = tuple(row.get(field) for field in GROUP_FIELDS)
         groups[key].append(row)
+    return groups
+
+
+def validate_rows(
+    rows: list[dict],
+    expected_runs: int | None,
+    expected_groups: int | None,
+    expected_repetitions: int | None,
+) -> None:
+    groups = group_rows(rows)
+    if expected_runs is not None and len(rows) != expected_runs:
+        raise SystemExit(f"Expected {expected_runs} runs, found {len(rows)}")
+    if expected_groups is not None and len(groups) != expected_groups:
+        raise SystemExit(f"Expected {expected_groups} groups, found {len(groups)}")
+    if expected_repetitions is not None:
+        invalid = [
+            dict(zip(GROUP_FIELDS, key))
+            for key, group in groups.items()
+            if len(group) != expected_repetitions
+        ]
+        if invalid:
+            raise SystemExit(
+                f"Groups without {expected_repetitions} repetitions: {invalid}"
+            )
+
+
+def write_summary(path: Path, rows: list[dict]) -> None:
+    groups = group_rows(rows)
 
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=SUMMARY_FIELDS)
         writer.writeheader()
-        for key, group in sorted(groups.items(), key=lambda item: item[0][1:4]):
+        for key, group in sorted(
+            groups.items(),
+            key=lambda item: tuple(str(value) for value in item[0]),
+        ):
+            group_values = dict(zip(GROUP_FIELDS, key))
             docs_mean, docs_stddev, docs_ci95 = mean_and_ci95(
                 row["docs_per_sec"] for row in group
             )
@@ -153,10 +214,7 @@ def write_summary(path: Path, rows: list[dict]) -> None:
             )
             writer.writerow(
                 {
-                    "model_id": key[0],
-                    "max_length": key[1],
-                    "batch": key[2],
-                    "threads": key[3],
+                    **group_values,
                     "n_runs": len(group),
                     "n_docs_total": group[0].get("n_docs_total"),
                     "n_docs_measured": group[0].get("n_docs_measured"),
@@ -172,8 +230,6 @@ def write_summary(path: Path, rows: list[dict]) -> None:
                     "tail_amplification_ci95": round(tail_ci95, 6),
                     "total_seconds_measured_mean": round(total_mean, 6),
                     "total_seconds_measured_ci95": round(total_ci95, 6),
-                    "corpus_sha256": key[4],
-                    "warmup_corpus_sha256": key[5],
                 }
             )
 
@@ -181,6 +237,9 @@ def write_summary(path: Path, rows: list[dict]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Aggregate benchmark run records.")
     parser.add_argument("--run-root", required=True, help="Matrix result directory")
+    parser.add_argument("--expected-runs", type=int)
+    parser.add_argument("--expected-groups", type=int)
+    parser.add_argument("--expected-repetitions", type=int)
     args = parser.parse_args()
 
     run_root = Path(args.run_root)
@@ -188,6 +247,12 @@ def main() -> None:
         raise SystemExit(f"{run_root} not found")
 
     rows = load_rows(run_root)
+    validate_rows(
+        rows,
+        args.expected_runs,
+        args.expected_groups,
+        args.expected_repetitions,
+    )
     runs_path = run_root / "runs.csv"
     summary_path = run_root / "summary.csv"
     write_runs(runs_path, rows)

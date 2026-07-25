@@ -52,7 +52,11 @@ def batch_iter(items: list[str], batch_size: int):
 def git_commit() -> str | None:
     try:
         return (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True)
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
             .strip()
             .splitlines()[0]
         )
@@ -62,7 +66,11 @@ def git_commit() -> str | None:
 
 def git_dirty() -> bool:
     try:
-        status = subprocess.check_output(["git", "status", "--porcelain"], text=True)
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
         return bool(status.strip())
     except Exception:
         return False
@@ -102,6 +110,11 @@ def main() -> None:
     )
     parser.add_argument("--model", default="BAAI/bge-m3", help="Modelo")
     parser.add_argument(
+        "--model-revision",
+        default=None,
+        help="Revisao imutavel do repositorio do modelo",
+    )
+    parser.add_argument(
         "--warmup-docs",
         type=int,
         default=32,
@@ -127,8 +140,9 @@ def main() -> None:
     os.environ["MKL_NUM_THREADS"] = str(args.threads)
     os.environ["OPENBLAS_NUM_THREADS"] = str(args.threads)
     os.environ["NUMEXPR_NUM_THREADS"] = str(args.threads)
+    interop_threads = max(1, args.threads // 2)
     torch.set_num_threads(args.threads)
-    torch.set_num_interop_threads(max(1, args.threads // 2))
+    torch.set_num_interop_threads(interop_threads)
 
     corpus_path = Path(args.corpus)
     if not corpus_path.exists():
@@ -162,7 +176,11 @@ def main() -> None:
     out_dir = Path(args.outdir) if args.outdir else Path("results") / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model = SentenceTransformer(args.model, device="cpu")
+    model = SentenceTransformer(
+        args.model,
+        device="cpu",
+        revision=args.model_revision,
+    )
     model.max_seq_length = args.max_length
 
     if warmup_docs:
@@ -211,7 +229,11 @@ def main() -> None:
     measured_docs = len(measured_texts)
     p50_ms = float(np.percentile(per_doc_times, 50) * 1000.0) if per_doc_times else 0.0
     p95_ms = float(np.percentile(per_doc_times, 95) * 1000.0) if per_doc_times else 0.0
-    tail_amplification = float(p95_ms / p50_ms) if p50_ms > 0 else 0.0
+    recorded_p50_ms = round(p50_ms, 6)
+    recorded_p95_ms = round(p95_ms, 6)
+    tail_amplification = (
+        float(recorded_p95_ms / recorded_p50_ms) if recorded_p50_ms > 0 else 0.0
+    )
     docs_per_s = float(measured_docs / total_time) if total_time > 0 else 0.0
 
     cpu_user_s = float(usage_after.ru_utime - usage_before.ru_utime)
@@ -226,6 +248,7 @@ def main() -> None:
         else None,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "model_id": args.model,
+        "model_revision": args.model_revision,
         "python_version": platform.python_version(),
         "git_commit": git_commit(),
         "git_dirty": git_dirty(),
@@ -239,15 +262,19 @@ def main() -> None:
         "batch": args.batch,
         "max_length": args.max_length,
         "threads": args.threads,
+        "interop_threads": interop_threads,
         "warmup_docs": warmup_docs,
         "n_docs_total": n_docs,
         "n_docs_measured": measured_docs,
         "total_seconds_measured": round(total_time, 6),
         "docs_per_sec": round(docs_per_s, 6),
-        "p50_ms": round(p50_ms, 3),
-        "p95_ms": round(p95_ms, 3),
+        "p50_ms": recorded_p50_ms,
+        "p95_ms": recorded_p95_ms,
         "tail_amplification": round(tail_amplification, 6),
         "latency_semantics": "amortized_per_document_from_batch_duration",
+        "tail_amplification_semantics": (
+            "workload_level_p95_over_p50_across_fixed_heterogeneous_corpus"
+        ),
         "cpu_user_s": round(cpu_user_s, 6),
         "cpu_system_s": round(cpu_system_s, 6),
         "cpu_time_semantics": "measured_window_delta",
