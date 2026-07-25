@@ -181,13 +181,20 @@ For every machine:
 2. Run `./scripts/run_all.sh` without overrides.
 3. Retain the complete `results/<matrix_run_id>/` directory.
 4. Verify `manifest.json` reports `completed`, 36 runs, and 12 summary rows.
-5. Join results only when model revision, Git commit, uv lock, corpus hashes,
-   `max_length`, batch, thread configuration, and warm-up configuration are identical.
-6. Compare matching rows and retain every run directory as an audit artifact.
+5. Declare whether the analysis uses matched parameters or the best-observed
+   configuration used by the reported experiment.
+6. For a matched-parameter analysis, join rows only when model revision, Git
+   commit, uv lock, corpus hashes, `max_length`, batch, thread configuration,
+   and warm-up configuration are identical.
+7. For a best-observed analysis, apply the same documented batch-selection rule
+   in every environment and retain the selected batch together with the full matrix.
+8. Report the selected analysis mode and retain every run directory as an audit artifact.
 
-Selecting the best batch independently in each environment does not represent an
-identical-parameter comparison. A future benchmark revision may use
-token-stratified corpora and homogeneous batch composition; the current profile
-is intentionally preserved for compatibility with the reported experiment.
+Both modes use the same complete benchmark matrix. Best-observed analysis
+characterizes each environment after batch selection, while matched-parameter
+analysis isolates a fixed batch. Neither changes benchmark execution. A future
+benchmark revision may use token-stratified corpora and homogeneous batch
+composition; the current profile is intentionally preserved for compatibility
+with the reported experiment.
 
 Do not commit `.env`, `results/`, or `reports/`.

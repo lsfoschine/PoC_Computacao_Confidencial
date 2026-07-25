@@ -183,13 +183,20 @@ Em cada maquina:
 2. Execute `./scripts/run_all.sh` sem sobrescrever parametros.
 3. Preserve o diretorio completo `results/<matrix_run_id>/`.
 4. Confirme que `manifest.json` registra `completed`, 36 runs e 12 linhas no resumo.
-5. Junte somente resultados com revisao do modelo, commit Git, uv lock, hashes dos
-   corpus, `max_length`, batch, configuracao de threads e warm-up identicos.
-6. Compare linhas correspondentes e preserve cada run como artefato de auditoria.
+5. Declare se a analise usa parametros pareados ou a configuracao best-observed
+   adotada pelo experimento reportado.
+6. Para uma analise com parametros pareados, junte somente linhas com revisao do
+   modelo, commit Git, uv lock, hashes dos corpus, `max_length`, batch,
+   configuracao de threads e warm-up identicos.
+7. Para uma analise best-observed, aplique a mesma regra documentada de selecao
+   de batch em todos os ambientes e preserve o batch selecionado com a matriz completa.
+8. Informe o modo de analise escolhido e preserve cada run como artefato de auditoria.
 
-Selecionar o melhor batch independentemente em cada ambiente nao representa uma
-comparacao com parametros identicos. Uma revisao futura podera usar corpus
-estratificado por tokens e composicao homogenea de batches; o perfil atual e
-preservado para manter compatibilidade com o experimento reportado.
+Os dois modos usam a mesma matriz completa do benchmark. A analise best-observed
+caracteriza cada ambiente apos a selecao do batch, enquanto a analise com
+parametros pareados isola um batch fixo. Nenhum dos modos altera a execucao do
+benchmark. Uma revisao futura podera usar corpus estratificado por tokens e
+composicao homogenea de batches; o perfil atual e preservado para manter
+compatibilidade com o experimento reportado.
 
 Nao versione `.env`, `results/` ou `reports/`.

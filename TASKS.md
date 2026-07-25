@@ -15,5 +15,6 @@
 - [ ] Evaluate a token-stratified corpus with homogeneous batch composition.
 - [ ] Report per-size latency distributions separately from workload-level tail
       amplification.
-- [ ] Add a provider-agnostic comparison tool that joins only identical profiles
-      and reports uncertainty for baseline-versus-confidential deltas.
+- [ ] Add a provider-agnostic comparison tool that supports declared
+      best-observed and matched-parameter views and reports uncertainty for
+      baseline-versus-confidential deltas.

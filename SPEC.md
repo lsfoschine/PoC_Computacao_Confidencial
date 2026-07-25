@@ -61,10 +61,18 @@ Machine comparisons must use repeated runs from `summary.csv`. Report means and
 95% confidence intervals, plus the repetition count. Small differences with
 overlapping intervals must not be presented as conclusive performance gains.
 
-Rows may be joined only when model revision, Git commit, uv lock, corpus hashes,
-maximum length, batch, thread configuration, and warm-up parameters match. Independent
-per-environment selection of the best batch is not an identical-parameter
-comparison.
+The same complete matrix supports two declared reporting modes:
+
+- matched-parameter analysis joins rows only when model revision, Git commit,
+  uv lock, corpus hashes, maximum length, batch, thread configuration, and
+  warm-up parameters match;
+- best-observed analysis, used by the reported experiment, applies one
+  documented batch-selection rule in every environment and records the selected
+  batch with the complete matrix.
+
+Best-observed analysis characterizes each environment after batch selection;
+matched-parameter analysis isolates a fixed batch. This distinction affects
+post-processing and interpretation, not benchmark execution.
 
 ## Current workload interpretation
 
