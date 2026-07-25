@@ -13,6 +13,7 @@ auditable run metadata.
 - `data/warmup.jsonl`: deterministic, size-stratified warm-up corpus.
 - `data/warmup.sha256`: warm-up corpus integrity manifest.
 - `uv.lock`: dependency lockfile used by every environment.
+- `scripts/benchmark_profile.sh`: canonical model revision and matrix parameters.
 
 Warm-up data must use the same model, tokenizer, maximum length, batch size, and
 thread configuration as the measured corpus. Warm-up data is not included in
@@ -26,6 +27,7 @@ embeddings or measured metrics.
 4. Measure the complete versioned corpus.
 5. Repeat every matrix combination at least three times.
 6. Retain raw run artifacts and aggregate results with 95% confidence intervals.
+7. Validate expected artifact counts before marking the matrix complete.
 
 ## Run metrics
 
@@ -46,6 +48,8 @@ Every run records:
 - Python version, Git commit, and dirty state;
 - environment metadata covering CPU, memory, storage, kernel, NUMA, affinity,
   frequency policy, microcode, and confidential-computing signals.
+- a matrix manifest, pre-run environment snapshot, execution log, and completion
+  marker produced by the canonical runner.
 
 The benchmark remains provider-agnostic. The executor may assign a descriptive
 `MATRIX_RUN_ID` to organize scenarios, while `env.json` remains the auditable
@@ -56,3 +60,17 @@ source of observed platform characteristics.
 Machine comparisons must use repeated runs from `summary.csv`. Report means and
 95% confidence intervals, plus the repetition count. Small differences with
 overlapping intervals must not be presented as conclusive performance gains.
+
+Rows may be joined only when model revision, Git commit, uv lock, corpus hashes,
+maximum length, batch, thread configuration, and warm-up parameters match. Independent
+per-environment selection of the best batch is not an identical-parameter
+comparison.
+
+## Current workload interpretation
+
+The versioned corpus intentionally preserves the reported experiment: target
+sizes are approximate characters, every run processes all size classes, and
+`max_length` is a tokenizer token limit. Latency percentiles and tail
+amplification describe this fixed heterogeneous workload. Token-stratified
+corpora and homogeneous batch composition are reserved for a future methodology
+revision so that current results are not silently redefined.

@@ -19,14 +19,14 @@ virtual environment.
 
 ```bash
 uv python install
-uv sync
+uv sync --frozen
 ```
 
 For environments where user-level cache directories are restricted:
 
 ```bash
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv python install
-UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync
+UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync --frozen
 ```
 
 For authenticated Hugging Face downloads:
@@ -45,6 +45,12 @@ The repository contains two deterministic datasets:
   size: 256, 512, 1024, 2048, 4096, and 8192 approximate characters.
 - `data/warmup.jsonl`: 32 deterministic, size-stratified documents used only to
   stabilize the same tokenization and encoding pipeline before measurement.
+
+The `size_target` values describe approximate characters, while `max_length`
+configures the tokenizer's token limit. Every run measures the complete fixed
+corpus containing all six size classes. P50, P95, and tail amplification
+therefore describe the latency distribution of this heterogeneous workload, not
+isolated scheduler jitter for a single document length.
 
 Validate both datasets before running:
 
@@ -65,9 +71,10 @@ regenerate them by default. To intentionally replace both datasets and hashes:
 uv run python src/bench_embed.py \
   --corpus data/corpus.jsonl \
   --warmup-corpus data/warmup.jsonl \
+  --model-revision 5617a9f61b028005a4858fdac845db406aefb181 \
   --batch 16 \
   --max-length 512 \
-  --threads 8 \
+  --threads 4 \
   --warmup-docs 32
 ```
 
@@ -89,7 +96,8 @@ dimensionless ratio `p95_ms / p50_ms`.
 ```
 
 The default matrix runs three repetitions for every `max_length × batch`
-combination. Override it with:
+combination using the versioned profile in `scripts/benchmark_profile.sh`.
+Override it with:
 
 ```bash
 REPETITIONS=5 MAX_LENGTHS="256 512 1024" BATCHES="4 8" ./scripts/run_matrix.sh
@@ -123,13 +131,18 @@ overlapping intervals should not be reported as conclusive gains.
 ```
 
 The complete runner installs the pinned Python version, synchronizes the uv
-environment, validates the datasets, captures standalone environment metadata,
-and executes the repeated matrix.
+environment without modifying the lockfile, validates the datasets, enforces the
+canonical profile, captures pre-run environment metadata, logs execution, and
+executes the repeated matrix. It can be invoked from any working directory.
 
 Useful options:
 
 ```text
 --repetitions N
+--threads N
+--model-revision SHA
+--matrix-run-id ID
+--allow-dirty
 --regenerate-corpus
 --skip-python
 --skip-sync
@@ -148,7 +161,12 @@ Each benchmark run writes:
 - `results/<run_id>/env.json`
 
 Matrix executions write nested runs under `results/<matrix_run_id>/`, plus
-`runs.csv` and `summary.csv`.
+`runs.csv` and `summary.csv`. A complete `run_all.sh` execution also writes:
+
+- `manifest.json`: resolved profile, hashes, provenance, expected and actual counts.
+- `env.before.json`: environment evidence captured before the matrix.
+- `run.log`: runner stdout and stderr.
+- `COMPLETED`: present only after artifact-count validation succeeds.
 
 The environment metadata is captured best-effort and includes CPU topology,
 microcode, frequency policy, NUMA, affinity, memory, storage and mount details,
@@ -159,10 +177,17 @@ permission-restricted signals are represented explicitly in the JSON.
 
 For every machine:
 
-1. Check out the same Git commit.
-2. Run `./scripts/verify_corpus.sh`.
-3. Confirm identical corpus and warm-up hashes.
-4. Use the same matrix, thread count, and repetition count.
-5. Compare `summary.csv` and retain every run directory as an audit artifact.
+1. Check out the same clean Git commit.
+2. Run `./scripts/run_all.sh` without overrides.
+3. Retain the complete `results/<matrix_run_id>/` directory.
+4. Verify `manifest.json` reports `completed`, 36 runs, and 12 summary rows.
+5. Join results only when model revision, Git commit, uv lock, corpus hashes,
+   `max_length`, batch, thread configuration, and warm-up configuration are identical.
+6. Compare matching rows and retain every run directory as an audit artifact.
+
+Selecting the best batch independently in each environment does not represent an
+identical-parameter comparison. A future benchmark revision may use
+token-stratified corpora and homogeneous batch composition; the current profile
+is intentionally preserved for compatibility with the reported experiment.
 
 Do not commit `.env`, `results/`, or `reports/`.

@@ -19,14 +19,14 @@ o ambiente virtual.
 
 ```bash
 uv python install
-uv sync
+uv sync --frozen
 ```
 
 Para ambientes que restringem diretorios de cache do usuario:
 
 ```bash
 UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv python install
-UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync
+UV_CACHE_DIR=.uv-cache UV_PYTHON_INSTALL_DIR=.uv-python uv sync --frozen
 ```
 
 Para downloads autenticados no Hugging Face:
@@ -47,6 +47,12 @@ O repositorio contem dois datasets deterministicos:
   tamanho, usados apenas para estabilizar o mesmo pipeline de tokenizacao e
   encoding antes da medicao.
 
+Os valores de `size_target` descrevem caracteres aproximados, enquanto
+`max_length` configura o limite de tokens do tokenizer. Cada run mede o corpus
+fixo completo com as seis classes de tamanho. P50, P95 e amplificacao de cauda
+descrevem, portanto, a distribuicao de latencia desse workload heterogeneo, e nao
+apenas jitter de escalonamento para um unico tamanho de documento.
+
 Valide ambos antes da execucao:
 
 ```bash
@@ -66,9 +72,10 @@ regenera por padrao. Para substituir intencionalmente os datasets e hashes:
 uv run python src/bench_embed.py \
   --corpus data/corpus.jsonl \
   --warmup-corpus data/warmup.jsonl \
+  --model-revision 5617a9f61b028005a4858fdac845db406aefb181 \
   --batch 16 \
   --max-length 512 \
-  --threads 8 \
+  --threads 4 \
   --warmup-docs 32
 ```
 
@@ -90,7 +97,8 @@ como a razao adimensional `p95_ms / p50_ms`.
 ```
 
 Por padrao, a matriz executa tres repeticoes para cada combinacao de
-`max_length × batch`. Para alterar:
+`max_length × batch`, usando o perfil versionado em
+`scripts/benchmark_profile.sh`. Para alterar:
 
 ```bash
 REPETITIONS=5 MAX_LENGTHS="256 512 1024" BATCHES="4 8" ./scripts/run_matrix.sh
@@ -124,13 +132,18 @@ intervalos sobrepostos nao devem ser apresentadas como ganhos conclusivos.
 ```
 
 O runner completo instala a versao fixada do Python, sincroniza o ambiente uv,
-valida os datasets, coleta metadados independentes do ambiente e executa a matriz
-com repeticoes.
+sem modificar o lockfile, valida os datasets, aplica o perfil canonico, coleta
+metadados antes da matriz, registra o log e executa a matriz com repeticoes. Ele
+pode ser chamado a partir de qualquer diretorio.
 
 Opcoes uteis:
 
 ```text
 --repetitions N
+--threads N
+--model-revision SHA
+--matrix-run-id ID
+--allow-dirty
 --regenerate-corpus
 --skip-python
 --skip-sync
@@ -149,7 +162,12 @@ Cada execucao grava:
 - `results/<run_id>/env.json`
 
 Execucoes da matriz gravam runs aninhados em `results/<matrix_run_id>/`, alem de
-`runs.csv` e `summary.csv`.
+`runs.csv` e `summary.csv`. Uma execucao completa de `run_all.sh` tambem grava:
+
+- `manifest.json`: perfil resolvido, hashes, proveniencia e contagens esperadas/reais.
+- `env.before.json`: evidencias do ambiente coletadas antes da matriz.
+- `run.log`: stdout e stderr do runner.
+- `COMPLETED`: criado somente apos validar todas as contagens de artefatos.
 
 Os metadados de ambiente sao coletados em modo best-effort e incluem topologia
 de CPU, microcode, politica de frequencia, NUMA, afinidade, memoria,
@@ -161,11 +179,17 @@ representados explicitamente no JSON.
 
 Em cada maquina:
 
-1. Obtenha o mesmo commit Git.
-2. Execute `./scripts/verify_corpus.sh`.
-3. Confirme hashes identicos para o corpus e o warm-up.
-4. Use a mesma matriz, quantidade de threads e repeticoes.
-5. Compare `summary.csv` e preserve cada diretorio de run como artefato de
-   auditoria.
+1. Obtenha o mesmo commit Git sem alteracoes locais.
+2. Execute `./scripts/run_all.sh` sem sobrescrever parametros.
+3. Preserve o diretorio completo `results/<matrix_run_id>/`.
+4. Confirme que `manifest.json` registra `completed`, 36 runs e 12 linhas no resumo.
+5. Junte somente resultados com revisao do modelo, commit Git, uv lock, hashes dos
+   corpus, `max_length`, batch, configuracao de threads e warm-up identicos.
+6. Compare linhas correspondentes e preserve cada run como artefato de auditoria.
+
+Selecionar o melhor batch independentemente em cada ambiente nao representa uma
+comparacao com parametros identicos. Uma revisao futura podera usar corpus
+estratificado por tokens e composicao homogenea de batches; o perfil atual e
+preservado para manter compatibilidade com o experimento reportado.
 
 Nao versione `.env`, `results/` ou `reports/`.
