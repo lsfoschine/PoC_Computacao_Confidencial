@@ -8,8 +8,6 @@ conventional and confidential-computing Linux environments. The benchmark uses
 per-run environment metadata, and repeated measurements with 95% confidence
 intervals.
 
-![Example benchmark result layout](docs/results-preview.svg)
-
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/)

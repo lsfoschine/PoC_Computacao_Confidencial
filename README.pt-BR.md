@@ -8,8 +8,6 @@ ambientes Linux convencionais e com computacao confidencial. O benchmark usa
 isolados, metadados de ambiente por execucao e medicoes repetidas com intervalos
 de confianca de 95%.
 
-![Exemplo da estrutura dos resultados](docs/results-preview.svg)
-
 ## Requisitos
 
 - [uv](https://docs.astral.sh/uv/)
