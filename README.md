@@ -2,8 +2,8 @@
 
 [English](README.md) | [Português](README.pt-BR.md)
 
-A reproducible CPU-only benchmark for comparing embedding workloads across local,
-GCP baseline, and GCP confidential-computing machines. The benchmark uses
+A reproducible CPU-only benchmark for comparing embedding workloads across
+conventional and confidential-computing Linux environments. The benchmark uses
 `BAAI/bge-m3`, versioned input datasets, content hashes, isolated warm-up data,
 per-run environment metadata, and repeated measurements with 95% confidence
 intervals.
@@ -81,7 +81,8 @@ docs_per_sec = n_docs_measured / total_seconds_measured
 
 Warm-up documents are never included in measured latency, throughput, CPU time,
 or embeddings. The recorded p50/p95 values are amortized per-document latency
-derived from each batch duration.
+derived from each batch duration. Tail amplification is recorded as the
+dimensionless ratio `p95_ms / p50_ms`.
 
 ## Repeated benchmark matrix
 
@@ -96,11 +97,22 @@ combination. Override it with:
 REPETITIONS=5 MAX_LENGTHS="256 512 1024" BATCHES="4 8" ./scripts/run_matrix.sh
 ```
 
+The benchmark is provider-agnostic. Executors can use `MATRIX_RUN_ID` as an
+operational label without changing the measurement:
+
+```bash
+MATRIX_RUN_ID=amd-sev-snp-01 ./scripts/run_matrix.sh
+```
+
+This label organizes artifacts; the observed platform evidence remains in each
+run's `env.json`.
+
 Outputs:
 
 - `runs.csv`: one row per individual execution.
 - `summary.csv`: means, standard deviation, and 95% confidence intervals grouped
-  by model, maximum length, batch, threads, and dataset hashes.
+  by model, maximum length, batch, threads, and dataset hashes, including tail
+  amplification.
 
 Use the confidence intervals when comparing machines. Small differences with
 overlapping intervals should not be reported as conclusive gains.

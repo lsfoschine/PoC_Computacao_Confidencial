@@ -52,6 +52,7 @@ RUN_FIELDS = [
     "n_docs_measured",
     "p50_ms",
     "p95_ms",
+    "tail_amplification",
     "docs_per_sec",
     "total_seconds_measured",
     "corpus_sha256",
@@ -74,6 +75,9 @@ SUMMARY_FIELDS = [
     "p50_ms_ci95",
     "p95_ms_mean",
     "p95_ms_ci95",
+    "tail_amplification_mean",
+    "tail_amplification_stddev",
+    "tail_amplification_ci95",
     "total_seconds_measured_mean",
     "total_seconds_measured_ci95",
     "corpus_sha256",
@@ -87,7 +91,13 @@ def load_rows(run_root: Path) -> list[dict]:
         with run_file.open("r", encoding="utf-8") as handle:
             for line in handle:
                 if line.strip():
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
+                    if row.get("tail_amplification") in (None, ""):
+                        p50_ms = float(row["p50_ms"])
+                        row["tail_amplification"] = (
+                            float(row["p95_ms"]) / p50_ms if p50_ms > 0 else 0.0
+                        )
+                    rows.append(row)
     if not rows:
         raise SystemExit(f"No run.jsonl records found under {run_root}")
     return rows
@@ -135,6 +145,9 @@ def write_summary(path: Path, rows: list[dict]) -> None:
             )
             p50_mean, _, p50_ci95 = mean_and_ci95(row["p50_ms"] for row in group)
             p95_mean, _, p95_ci95 = mean_and_ci95(row["p95_ms"] for row in group)
+            tail_mean, tail_stddev, tail_ci95 = mean_and_ci95(
+                row["tail_amplification"] for row in group
+            )
             total_mean, _, total_ci95 = mean_and_ci95(
                 row["total_seconds_measured"] for row in group
             )
@@ -154,6 +167,9 @@ def write_summary(path: Path, rows: list[dict]) -> None:
                     "p50_ms_ci95": round(p50_ci95, 3),
                     "p95_ms_mean": round(p95_mean, 3),
                     "p95_ms_ci95": round(p95_ci95, 3),
+                    "tail_amplification_mean": round(tail_mean, 6),
+                    "tail_amplification_stddev": round(tail_stddev, 6),
+                    "tail_amplification_ci95": round(tail_ci95, 6),
                     "total_seconds_measured_mean": round(total_mean, 6),
                     "total_seconds_measured_ci95": round(total_ci95, 6),
                     "corpus_sha256": key[4],

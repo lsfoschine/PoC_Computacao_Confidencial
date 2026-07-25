@@ -3,7 +3,7 @@
 [English](README.md) | [Português](README.pt-BR.md)
 
 Benchmark reproduzivel e CPU-only para comparar workloads de embeddings entre
-maquinas locais, GCP baseline e GCP com computacao confidencial. O benchmark usa
+ambientes Linux convencionais e com computacao confidencial. O benchmark usa
 `BAAI/bge-m3`, datasets versionados, hashes de conteudo, dados de warm-up
 isolados, metadados de ambiente por execucao e medicoes repetidas com intervalos
 de confianca de 95%.
@@ -82,7 +82,8 @@ docs_per_sec = n_docs_measured / total_seconds_measured
 
 Os documentos de warm-up nao participam da latencia, throughput, tempo de CPU
 ou embeddings medidos. Os valores p50/p95 representam latencia amortizada por
-documento, derivada da duracao de cada batch.
+documento, derivada da duracao de cada batch. A amplificacao de cauda e registrada
+como a razao adimensional `p95_ms / p50_ms`.
 
 ## Matriz com repeticoes
 
@@ -97,11 +98,22 @@ Por padrao, a matriz executa tres repeticoes para cada combinacao de
 REPETITIONS=5 MAX_LENGTHS="256 512 1024" BATCHES="4 8" ./scripts/run_matrix.sh
 ```
 
+O benchmark e agnostico ao provedor. O executor pode usar `MATRIX_RUN_ID` como
+rotulo operacional sem alterar a medicao:
+
+```bash
+MATRIX_RUN_ID=amd-sev-snp-01 ./scripts/run_matrix.sh
+```
+
+Esse rotulo organiza os artefatos; as evidencias observadas da plataforma
+permanecem no `env.json` de cada execucao.
+
 Saidas:
 
 - `runs.csv`: uma linha para cada execucao individual.
 - `summary.csv`: medias, desvio padrao e intervalos de confianca de 95%,
-  agrupados por modelo, tamanho maximo, batch, threads e hashes dos datasets.
+  agrupados por modelo, tamanho maximo, batch, threads e hashes dos datasets,
+  incluindo amplificacao de cauda.
 
 Use os intervalos de confianca para comparar maquinas. Diferencas pequenas com
 intervalos sobrepostos nao devem ser apresentadas como ganhos conclusivos.

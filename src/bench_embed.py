@@ -211,6 +211,7 @@ def main() -> None:
     measured_docs = len(measured_texts)
     p50_ms = float(np.percentile(per_doc_times, 50) * 1000.0) if per_doc_times else 0.0
     p95_ms = float(np.percentile(per_doc_times, 95) * 1000.0) if per_doc_times else 0.0
+    tail_amplification = float(p95_ms / p50_ms) if p50_ms > 0 else 0.0
     docs_per_s = float(measured_docs / total_time) if total_time > 0 else 0.0
 
     cpu_user_s = float(usage_after.ru_utime - usage_before.ru_utime)
@@ -245,6 +246,7 @@ def main() -> None:
         "docs_per_sec": round(docs_per_s, 6),
         "p50_ms": round(p50_ms, 3),
         "p95_ms": round(p95_ms, 3),
+        "tail_amplification": round(tail_amplification, 6),
         "latency_semantics": "amortized_per_document_from_batch_duration",
         "cpu_user_s": round(cpu_user_s, 6),
         "cpu_system_s": round(cpu_system_s, 6),
