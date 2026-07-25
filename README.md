@@ -1,5 +1,7 @@
 # Confidential Computing Benchmark PoC
 
+[English](README.md) | [Português](README.pt-BR.md)
+
 A reproducible CPU-only benchmark for comparing embedding workloads across local,
 GCP baseline, and GCP confidential-computing machines. The benchmark uses
 `BAAI/bge-m3`, versioned input datasets, content hashes, isolated warm-up data,
@@ -7,10 +9,6 @@ per-run environment metadata, and repeated measurements with 95% confidence
 intervals.
 
 ![Example benchmark result layout](docs/results-preview.svg)
-
-> This repository does not claim performance gains by itself. Comparisons should
-> use repeated runs, the generated confidence intervals, identical corpus hashes,
-> and equivalent runtime parameters.
 
 ## Requirements
 
