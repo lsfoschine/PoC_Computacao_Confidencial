@@ -107,6 +107,11 @@ def main() -> None:
         default=32,
         help="Quantidade de docs para warm-up (0..N)",
     )
+    parser.add_argument(
+        "--warmup-corpus",
+        default="data/warmup.jsonl",
+        help="JSONL separado usado exclusivamente no warm-up",
+    )
     args = parser.parse_args()
 
     if args.batch <= 0:
@@ -135,14 +140,23 @@ def main() -> None:
 
     texts = [rec["text"] for rec in records]
     n_docs = len(texts)
-    warmup_docs = min(args.warmup_docs, n_docs)
-    if n_docs > 0 and warmup_docs >= n_docs:
-        warmup_docs = max(0, n_docs - 1)
-        print(
-            f"Warm-up ajustado para {warmup_docs} docs para evitar zero docs medidos.",
-            flush=True,
-        )
-    measured_texts = texts[warmup_docs:]
+    measured_texts = texts
+
+    warmup_path = Path(args.warmup_corpus)
+    warmup_texts = []
+    if args.warmup_docs:
+        if not warmup_path.exists():
+            raise SystemExit(f"Corpus de warm-up nao encontrado: {warmup_path}")
+        warmup_records = load_corpus(warmup_path)
+        warmup_docs = min(args.warmup_docs, len(warmup_records))
+        if warmup_docs < args.warmup_docs:
+            print(
+                f"Warm-up ajustado para {warmup_docs} docs disponiveis.",
+                flush=True,
+            )
+        warmup_texts = [rec["text"] for rec in warmup_records[:warmup_docs]]
+    else:
+        warmup_docs = 0
 
     run_id = build_run_id()
     out_dir = Path(args.outdir) if args.outdir else Path("results") / run_id
@@ -152,7 +166,7 @@ def main() -> None:
     model.max_seq_length = args.max_length
 
     if warmup_docs:
-        for _, batch in batch_iter(texts[:warmup_docs], args.batch):
+        for _, batch in batch_iter(warmup_texts, args.batch):
             model.encode(
                 batch,
                 batch_size=args.batch,
@@ -163,6 +177,7 @@ def main() -> None:
 
     embeddings = []
     per_doc_times = []
+    usage_before = resource.getrusage(resource.RUSAGE_SELF)
     total_start = time.perf_counter()
 
     for _, batch in batch_iter(measured_texts, args.batch):
@@ -179,21 +194,8 @@ def main() -> None:
         per_doc_times.extend([duration / len(batch)] * len(batch))
 
     total_time = time.perf_counter() - total_start
-
-    if warmup_docs:
-        warmup_embeddings = model.encode(
-            texts[:warmup_docs],
-            batch_size=args.batch,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=False,
-        )
-        if embeddings:
-            all_embeddings = np.vstack([warmup_embeddings, np.vstack(embeddings)])
-        else:
-            all_embeddings = warmup_embeddings
-    else:
-        all_embeddings = np.vstack(embeddings) if embeddings else np.empty((0, 0))
+    usage_after = resource.getrusage(resource.RUSAGE_SELF)
+    all_embeddings = np.vstack(embeddings) if embeddings else np.empty((0, 0))
 
     embeddings_path = out_dir / "embeddings.npy"
     np.save(embeddings_path, all_embeddings)
@@ -202,6 +204,7 @@ def main() -> None:
     embeddings_sha_path.write_text(f"{embeddings_sha}  embeddings.npy\n", encoding="utf-8")
 
     corpus_sha = hash_file(corpus_path)
+    warmup_sha = hash_file(warmup_path) if warmup_path.exists() else None
     uv_lock_path = Path("uv.lock")
     uv_lock_sha = hash_file(uv_lock_path) if uv_lock_path.exists() else None
 
@@ -210,11 +213,16 @@ def main() -> None:
     p95_ms = float(np.percentile(per_doc_times, 95) * 1000.0) if per_doc_times else 0.0
     docs_per_s = float(measured_docs / total_time) if total_time > 0 else 0.0
 
-    usage = resource.getrusage(resource.RUSAGE_SELF)
-    rss_peak_mb = float(usage.ru_maxrss) / 1024.0
+    cpu_user_s = float(usage_after.ru_utime - usage_before.ru_utime)
+    cpu_system_s = float(usage_after.ru_stime - usage_before.ru_stime)
+    rss_peak_mb = float(usage_after.ru_maxrss) / 1024.0
 
     run_record = {
         "run_id": run_id,
+        "matrix_run_id": os.environ.get("MATRIX_RUN_ID"),
+        "matrix_repetition": int(os.environ["MATRIX_REPETITION"])
+        if os.environ.get("MATRIX_REPETITION")
+        else None,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "model_id": args.model,
         "python_version": platform.python_version(),
@@ -223,6 +231,8 @@ def main() -> None:
         "uv_lock_sha256": uv_lock_sha,
         "corpus_path": str(corpus_path),
         "corpus_sha256": corpus_sha,
+        "warmup_corpus_path": str(warmup_path),
+        "warmup_corpus_sha256": warmup_sha,
         "embeddings_path": str(embeddings_path),
         "embeddings_sha256": embeddings_sha,
         "batch": args.batch,
@@ -235,9 +245,12 @@ def main() -> None:
         "docs_per_sec": round(docs_per_s, 6),
         "p50_ms": round(p50_ms, 3),
         "p95_ms": round(p95_ms, 3),
-        "cpu_user_s": round(float(usage.ru_utime), 6),
-        "cpu_system_s": round(float(usage.ru_stime), 6),
+        "latency_semantics": "amortized_per_document_from_batch_duration",
+        "cpu_user_s": round(cpu_user_s, 6),
+        "cpu_system_s": round(cpu_system_s, 6),
+        "cpu_time_semantics": "measured_window_delta",
         "rss_peak_mb": round(rss_peak_mb, 3),
+        "rss_peak_semantics": "process_peak_including_model_load_and_warmup",
     }
 
     run_path = out_dir / "run.jsonl"

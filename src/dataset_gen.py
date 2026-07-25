@@ -134,6 +134,13 @@ def parse_sizes(raw: str) -> list[int]:
     return [int(part.strip()) for part in raw.split(",") if part.strip()]
 
 
+def write_jsonl(path: Path, records: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, ensure_ascii=True) + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gera corpus deterministico em PT-BR.")
     parser.add_argument("--out", default="data/corpus.jsonl", help="Caminho do JSONL")
@@ -156,15 +163,39 @@ def main() -> None:
         default=None,
         help="Minimo de palavras por documento",
     )
+    parser.add_argument(
+        "--warmup-out",
+        default="data/warmup.jsonl",
+        help="Caminho do corpus separado de warm-up",
+    )
+    parser.add_argument(
+        "--warmup-docs",
+        type=int,
+        default=32,
+        help="Quantidade de documentos no corpus de warm-up",
+    )
+    parser.add_argument(
+        "--warmup-seed",
+        type=int,
+        default=None,
+        help="Seed do warm-up (default: seed + 1000003)",
+    )
     args = parser.parse_args()
 
     if args.language.lower() != "pt-br":
         raise SystemExit("Apenas language=pt-br esta disponivel.")
+    if args.n_per_size <= 0:
+        raise SystemExit("--n-per-size deve ser > 0")
+    if args.warmup_docs < 0:
+        raise SystemExit("--warmup-docs deve ser >= 0")
 
     rng = random.Random(args.seed)
     sizes = parse_sizes(args.sizes)
+    if not sizes or any(size <= 0 for size in sizes):
+        raise SystemExit("--sizes deve conter inteiros positivos")
+
     out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    warmup_path = Path(args.warmup_out)
 
     records = []
     doc_id = 0
@@ -179,11 +210,24 @@ def main() -> None:
             records.append(record)
             doc_id += 1
 
-    with out_path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=True) + "\n")
+    warmup_seed = args.warmup_seed if args.warmup_seed is not None else args.seed + 1_000_003
+    warmup_rng = random.Random(warmup_seed)
+    warmup_records = []
+    for warmup_id in range(args.warmup_docs):
+        target = sizes[warmup_id % len(sizes)]
+        warmup_records.append(
+            {
+                "id": f"warmup-{warmup_id:04d}",
+                "size_target": target,
+                "text": build_text(target, warmup_rng, args.min_words),
+            }
+        )
+
+    write_jsonl(out_path, records)
+    write_jsonl(warmup_path, warmup_records)
 
     print(f"Wrote {len(records)} docs to {out_path}")
+    print(f"Wrote {len(warmup_records)} warm-up docs to {warmup_path}")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CORPUS_PATH="${1:-data/corpus.jsonl}"
-OUT_PATH="${2:-data/corpus.sha256}"
+hash_one() {
+  local corpus_path="$1"
+  local out_path="$2"
 
-if [[ ! -f "$CORPUS_PATH" ]]; then
-  echo "Corpus nao encontrado: $CORPUS_PATH" >&2
-  exit 1
+  if [[ ! -f "$corpus_path" ]]; then
+    echo "Corpus nao encontrado: $corpus_path" >&2
+    exit 1
+  fi
+
+  sha256sum "$corpus_path" >"$out_path"
+  echo "Wrote $out_path"
+}
+
+if [[ $# -gt 0 ]]; then
+  hash_one "$1" "${2:-${1}.sha256}"
+else
+  hash_one "data/corpus.jsonl" "data/corpus.sha256"
+  hash_one "data/warmup.jsonl" "data/warmup.sha256"
 fi
-
-sha256sum "$CORPUS_PATH" > "$OUT_PATH"
-
-echo "Wrote $OUT_PATH"

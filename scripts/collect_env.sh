@@ -19,9 +19,14 @@ capture_cmd() {
   shift
   local bin="$1"
   if command -v "$bin" >/dev/null 2>&1; then
-    "$@" >"${TMPDIR_ENV}/${name}" 2>&1 || true
+    set +e
+    "$@" >"${TMPDIR_ENV}/${name}" 2>&1
+    local exit_code=$?
+    set -e
+    echo "$exit_code" >"${TMPDIR_ENV}/${name}.exit_code"
   else
     echo "not_found" >"${TMPDIR_ENV}/${name}"
+    echo "127" >"${TMPDIR_ENV}/${name}.exit_code"
   fi
 }
 
@@ -29,9 +34,14 @@ capture_file() {
   local name="$1"
   local path="$2"
   if [[ -f "$path" ]]; then
-    cat "$path" >"${TMPDIR_ENV}/${name}" 2>&1 || true
+    set +e
+    cat "$path" >"${TMPDIR_ENV}/${name}" 2>&1
+    local exit_code=$?
+    set -e
+    echo "$exit_code" >"${TMPDIR_ENV}/${name}.exit_code"
   else
     echo "not_found" >"${TMPDIR_ENV}/${name}"
+    echo "127" >"${TMPDIR_ENV}/${name}.exit_code"
   fi
 }
 
@@ -42,16 +52,22 @@ capture_cmd lscpu "lscpu"
 capture_cmd lscpu_extended "lscpu" "-e"
 
 if [[ -f "/proc/cpuinfo" ]]; then
-  awk -F: '/model name|flags|microcode/ {print}' /proc/cpuinfo >"${TMPDIR_ENV}/cpuinfo_relevant" || true
+  awk -F: '/model name|flags|microcode/ {print}' /proc/cpuinfo >"${TMPDIR_ENV}/cpuinfo_relevant"
+  echo "0" >"${TMPDIR_ENV}/cpuinfo_relevant.exit_code"
 else
   echo "not_found" >"${TMPDIR_ENV}/cpuinfo_relevant"
+  echo "127" >"${TMPDIR_ENV}/cpuinfo_relevant.exit_code"
 fi
 
 capture_cmd microcode_dmesg "dmesg"
-if [[ -f "${TMPDIR_ENV}/microcode_dmesg" ]]; then
-  grep -i microcode "${TMPDIR_ENV}/microcode_dmesg" >"${TMPDIR_ENV}/microcode_dmesg_filtered" || echo "not_found" >"${TMPDIR_ENV}/microcode_dmesg_filtered"
+if [[ "$(cat "${TMPDIR_ENV}/microcode_dmesg.exit_code")" != "0" ]]; then
+  cp "${TMPDIR_ENV}/microcode_dmesg" "${TMPDIR_ENV}/microcode_dmesg_filtered"
+  cp "${TMPDIR_ENV}/microcode_dmesg.exit_code" "${TMPDIR_ENV}/microcode_dmesg_filtered.exit_code"
+elif grep -i microcode "${TMPDIR_ENV}/microcode_dmesg" >"${TMPDIR_ENV}/microcode_dmesg_filtered"; then
+  echo "0" >"${TMPDIR_ENV}/microcode_dmesg_filtered.exit_code"
 else
   echo "not_found" >"${TMPDIR_ENV}/microcode_dmesg_filtered"
+  echo "127" >"${TMPDIR_ENV}/microcode_dmesg_filtered.exit_code"
 fi
 
 capture_file microcode_sysfs "/sys/devices/system/cpu/microcode/version"
@@ -72,15 +88,34 @@ capture_cmd free_h "free" "-h"
 capture_cmd meminfo "cat" "/proc/meminfo"
 
 capture_cmd lsblk "lsblk" "-o" "NAME,TYPE,SIZE,ROTA,TRAN,MODEL"
+capture_cmd lsblk_json "lsblk" "--json" "-o" "NAME,KNAME,PKNAME,PATH,TYPE,SIZE,ROTA,TRAN,MODEL,FSTYPE,MOUNTPOINTS"
 capture_cmd df_h "df" "-h"
 capture_cmd df_workdir "df" "-P" "."
-capture_cmd blockdev_rota "cat" "/sys/block/*/queue/rotational"
+capture_cmd findmnt_workdir "findmnt" "-T" "." "-o" "SOURCE,TARGET,FSTYPE,OPTIONS"
+capture_cmd stat_workdir "stat" "-f" "."
+capture_cmd zpool_status "zpool" "status" "-P"
+capture_cmd dmsetup_tree "dmsetup" "ls" "--tree"
+
+if compgen -G "/sys/block/*/queue/rotational" >/dev/null; then
+  for rotational_path in /sys/block/*/queue/rotational; do
+    printf "%s: " "$rotational_path"
+    cat "$rotational_path"
+  done >"${TMPDIR_ENV}/blockdev_rota"
+  echo "0" >"${TMPDIR_ENV}/blockdev_rota.exit_code"
+else
+  echo "not_found" >"${TMPDIR_ENV}/blockdev_rota"
+  echo "127" >"${TMPDIR_ENV}/blockdev_rota.exit_code"
+fi
 
 capture_cmd confidential_dmesg "dmesg"
-if [[ -f "${TMPDIR_ENV}/confidential_dmesg" ]]; then
-  grep -E -i "sev|snp|tdx|confidential|cc" "${TMPDIR_ENV}/confidential_dmesg" >"${TMPDIR_ENV}/confidential_dmesg_filtered" || echo "not_found" >"${TMPDIR_ENV}/confidential_dmesg_filtered"
+if [[ "$(cat "${TMPDIR_ENV}/confidential_dmesg.exit_code")" != "0" ]]; then
+  cp "${TMPDIR_ENV}/confidential_dmesg" "${TMPDIR_ENV}/confidential_dmesg_filtered"
+  cp "${TMPDIR_ENV}/confidential_dmesg.exit_code" "${TMPDIR_ENV}/confidential_dmesg_filtered.exit_code"
+elif grep -E -i "sev|snp|tdx|confidential|cc" "${TMPDIR_ENV}/confidential_dmesg" >"${TMPDIR_ENV}/confidential_dmesg_filtered"; then
+  echo "0" >"${TMPDIR_ENV}/confidential_dmesg_filtered.exit_code"
 else
   echo "not_found" >"${TMPDIR_ENV}/confidential_dmesg_filtered"
+  echo "127" >"${TMPDIR_ENV}/confidential_dmesg_filtered.exit_code"
 fi
 
 capture_cmd uv_version "uv" "--version"
@@ -100,9 +135,20 @@ def read_file(name: str):
     if not path.exists():
         return {"status": "not_found"}
     content = path.read_text(errors="replace").strip()
-    if content == "not_found" or not content:
+    exit_code_path = tmpdir / f"{name}.exit_code"
+    exit_code = None
+    if exit_code_path.exists():
+        try:
+            exit_code = int(exit_code_path.read_text().strip())
+        except ValueError:
+            exit_code = None
+    if content == "not_found":
         return {"status": "not_found"}
-    return {"status": "ok", "raw": content}
+    if exit_code not in (None, 0):
+        return {"status": "error", "exit_code": exit_code, "raw": content}
+    if not content:
+        return {"status": "empty", "exit_code": exit_code}
+    return {"status": "ok", "exit_code": exit_code, "raw": content}
 
 def parse_df_device(df_raw: str | None):
     if not df_raw:
@@ -189,8 +235,13 @@ payload = {
     },
     "storage": {
         "lsblk": read_file("lsblk"),
+        "lsblk_json": read_file("lsblk_json"),
         "df_h": read_file("df_h"),
         "df_workdir": read_file("df_workdir"),
+        "findmnt_workdir": read_file("findmnt_workdir"),
+        "stat_workdir": read_file("stat_workdir"),
+        "zpool_status": read_file("zpool_status"),
+        "dmsetup_tree": read_file("dmsetup_tree"),
         "blockdev_rotational": read_file("blockdev_rota"),
         "workdir": os.getcwd(),
         "workdir_device": None,

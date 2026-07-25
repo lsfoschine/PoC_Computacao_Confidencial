@@ -18,6 +18,8 @@ Opcoes:
   --batches LISTA       Batch sizes separados por espaco (ex: "4 8 16")
   --threads N           Numero de threads CPU
   --warmup-docs N       Quantidade de docs para warm-up
+  --repetitions N       Repeticoes por combinacao (default: 3)
+  --regenerate-corpus   Regenera corpus e warm-up versionados
   --skip-sync            Nao executa uv sync
   --skip-python          Nao executa uv python install
   --skip-dataset         Nao gera o corpus
@@ -37,6 +39,8 @@ MAX_LENGTHS=""
 BATCHES=""
 THREADS=""
 WARMUP_DOCS=""
+REPETITIONS="3"
+REGENERATE_CORPUS="0"
 SKIP_DATASET="0"
 SKIP_ENV="0"
 SKIP_MATRIX="0"
@@ -81,6 +85,14 @@ while [[ $# -gt 0 ]]; do
       WARMUP_DOCS="$2"
       shift 2
       ;;
+    --repetitions)
+      REPETITIONS="$2"
+      shift 2
+      ;;
+    --regenerate-corpus)
+      REGENERATE_CORPUS="1"
+      shift
+      ;;
     --skip-sync)
       SKIP_SYNC="1"
       shift
@@ -117,7 +129,7 @@ if [[ "$SKIP_SYNC" == "0" ]]; then
   uv sync
 fi
 
-if [[ "$SKIP_DATASET" == "0" ]]; then
+generate_corpora() {
   DATASET_ARGS=()
   if [[ -n "$SIZES" ]]; then
     DATASET_ARGS+=(--sizes "$SIZES")
@@ -131,16 +143,36 @@ if [[ "$SKIP_DATASET" == "0" ]]; then
   if [[ -n "$MIN_WORDS" ]]; then
     DATASET_ARGS+=(--min-words "$MIN_WORDS")
   fi
+  if [[ -n "$WARMUP_DOCS" ]]; then
+    DATASET_ARGS+=(--warmup-docs "$WARMUP_DOCS")
+  fi
   uv run python src/dataset_gen.py "${DATASET_ARGS[@]}"
   ./scripts/hash_corpus.sh
+}
+
+if [[ "$SKIP_DATASET" == "0" ]]; then
+  if [[ "$REGENERATE_CORPUS" == "1" ]]; then
+    echo "WARNING: regenerating versioned corpus and warm-up files."
+    generate_corpora
+  elif [[ -f data/corpus.jsonl ]]; then
+    if [[ ! -f data/corpus.sha256 || ! -f data/warmup.jsonl || ! -f data/warmup.sha256 ]]; then
+      echo "Corpus artifacts are incomplete. Use --regenerate-corpus to rebuild them." >&2
+      exit 1
+    fi
+    echo "Using the existing versioned corpus. Use --regenerate-corpus to replace it."
+    ./scripts/verify_corpus.sh
+  else
+    echo "No versioned corpus found; generating the canonical corpus and warm-up set."
+    generate_corpora
+  fi
 fi
 
 if [[ "$SKIP_ENV" == "0" ]]; then
   mkdir -p reports
-  ./scripts/collect_env.sh > reports/env.txt
+  ./scripts/collect_env.sh > reports/env.json
 fi
 
 if [[ "$SKIP_MATRIX" == "0" ]]; then
-  export MAX_LENGTHS BATCHES THREADS WARMUP_DOCS
+  export MAX_LENGTHS BATCHES THREADS WARMUP_DOCS REPETITIONS
   ./scripts/run_matrix.sh
 fi
