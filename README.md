@@ -15,6 +15,25 @@ intervals.
 The Python version is pinned in `.python-version`; uv downloads it and creates the
 virtual environment.
 
+## Reproducible benchmark checkout
+
+Use the `benchmark-v1` tag on every machine so that code, benchmark profile, and
+dependency lock are identical:
+
+```bash
+git clone https://github.com/lsfoschine/PoC_Computacao_Confidencial.git
+cd PoC_Computacao_Confidencial
+git checkout benchmark-v1
+./scripts/run_all.sh
+```
+
+The detached `HEAD` created by checking out the tag is expected for a benchmark
+execution. `run_all.sh` installs the pinned Python version with uv, synchronizes
+the locked dependencies, validates the versioned datasets, captures the
+environment, and runs the complete canonical matrix. If Hugging Face
+authentication is required, prepare `.env` as described below before the final
+command.
+
 ## Environment setup
 
 ```bash

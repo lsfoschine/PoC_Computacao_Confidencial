@@ -15,6 +15,24 @@ de confianca de 95%.
 A versao do Python esta fixada em `.python-version`; o uv faz o download e cria
 o ambiente virtual.
 
+## Checkout reproduzivel do benchmark
+
+Use a tag `benchmark-v1` em todas as maquinas para manter identicos o codigo, o
+perfil do benchmark e o lock de dependencias:
+
+```bash
+git clone https://github.com/lsfoschine/PoC_Computacao_Confidencial.git
+cd PoC_Computacao_Confidencial
+git checkout benchmark-v1
+./scripts/run_all.sh
+```
+
+O `HEAD` destacado criado pelo checkout da tag e esperado para uma execucao de
+benchmark. O `run_all.sh` instala pelo uv a versao fixada do Python, sincroniza
+as dependencias travadas, valida os datasets versionados, coleta o ambiente e
+executa a matriz canonica completa. Caso a autenticacao no Hugging Face seja
+necessaria, prepare o `.env` conforme descrito abaixo antes do ultimo comando.
+
 ## Preparacao do ambiente
 
 ```bash
